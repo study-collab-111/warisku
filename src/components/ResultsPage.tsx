@@ -15,7 +15,8 @@ import {
   ChevronRight,
   Sparkles,
   Download,
-  Globe
+  Globe,
+  FileDown
 } from 'lucide-react';
 import { CalculationResult } from '../types';
 import { translations } from '../utils/translations';
@@ -287,10 +288,11 @@ export default function ResultsPage({
 
           <button 
             onClick={handlePrint}
-            className="flex items-center gap-2 text-xs font-bold bg-[#16171a] text-[#EAE6E1] border border-[#C5A059]/25 px-5 py-3 rounded-full hover:bg-[#C5A059]/15 active:scale-95 transition-all shadow-sm cursor-pointer"
+            className="flex items-center gap-2 text-xs font-bold bg-[#C5A059]/20 text-[#EAE6E1] border border-[#C5A059]/45 px-5 py-3 rounded-full hover:bg-[#C5A059]/35 active:scale-95 transition-all shadow-md cursor-pointer"
+            title={lang === 'id' ? 'Unduh PDF Laporan' : 'Download PDF Report'}
           >
-            <Printer className="w-4 h-4 text-[#C5A059]" />
-            {t_strings.res_btn_print}
+            <FileDown className="w-4 h-4 text-[#C5A059]" />
+            <span>{t_strings.res_btn_print}</span>
           </button>
 
           <button 
@@ -326,10 +328,10 @@ export default function ResultsPage({
       </div>
 
       {/* Main Grid View */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start z-10 relative">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start z-10 relative print:flex print:flex-col print:gap-6 print:w-full">
         
         {/* Left Side: Summary and breakdown (lg:col-span-8) */}
-        <div className="lg:col-span-8 space-y-8">
+        <div className="lg:col-span-8 space-y-8 print:w-full print:block print:space-y-6">
           
           {/* Section: Harta Bersih (Tirkah) Summary banner card */}
           <div className="bg-[#111215] text-[#EAE6E1] p-6 sm:p-8 rounded-[28px] shadow-2xl relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 border border-[#C5A059]/25 border-l-4 border-l-[#C5A059]">
@@ -417,8 +419,8 @@ export default function ResultsPage({
               </span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[700px]">
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className="w-full text-left border-collapse min-w-[700px] print:min-w-0 print:w-full">
                 <thead>
                   <tr className="bg-[#111215] text-[11px] tracking-wider uppercase font-mono font-bold text-[#A69F96] border-b border-[#C5A059]/15">
                     <th className="py-4 px-5">{t_strings.table_col_name}</th>
@@ -475,7 +477,7 @@ export default function ResultsPage({
         </div>
 
         {/* Right Side: Interactive SVG Donut Chart and Trust Info (lg:col-span-4) */}
-        <div className="lg:col-span-4 space-y-6">
+        <div className="lg:col-span-4 space-y-6 print:w-full print:block print:space-y-6">
           
           {/* Card: Distribusi Ahli Waris Donut Chart */}
           <div className="bg-[#111215] border border-[#C5A059]/15 p-6 sm:p-8 rounded-2xl shadow-2xl text-center">

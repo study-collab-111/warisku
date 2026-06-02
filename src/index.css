@@ -14,15 +14,119 @@
 
 /* Custom print-friendly rules */
 @media print {
-  body {
-    background: white !important;
-    color: black !important;
+  /* Override default browser header/footer titles and print margins */
+  @page {
+    size: portrait;
+    margin: 12mm 12mm 12mm 12mm;
   }
-  header, footer, button, .print-hidden {
+
+  /* Reset body colors to black-and-white for crisp, high-contrast print */
+  html, body {
+    background: #ffffff !important;
+    color: #111827 !important;
+    font-family: "Inter", sans-serif !important;
+    font-size: 10pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide navigation, background decorative items, and interactive control buttons */
+  nav, button, header, footer, .print-hidden, [role="button"], .fixed {
     display: none !important;
   }
-  .print-box {
-    border: none !important;
+
+  /* Hide the dots background specifically */
+  div[style*="radial-gradient"] {
+    display: none !important;
+  }
+
+  /* Make sure container wrappers use print colors and fill space */
+  .print\:bg-white {
+    background: #ffffff !important;
+    color: #111827 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Force grid to stack into portrait page columns */
+  .print\:flex {
+    display: flex !important;
+  }
+  .print\:flex-col {
+    flex-direction: column !important;
+  }
+  .print\:w-full {
+    width: 100% !important;
+  }
+  .print\:block {
+    display: block !important;
+  }
+
+  /* Style all dark card containers elegantly on paper */
+  .bg-\[\#111215\], .bg-\[\#16171a\], .bg-\[\#0c0d10\] {
+    background: #ffffff !important;
+    color: #111827 !important;
+    border: 1px solid #e5e7eb !important;
     box-shadow: none !important;
+    border-radius: 12px !important;
+    break-inside: avoid !important;
+  }
+  
+  .border-\[\#C5A059\]\/25, .border-\[\#C5A059\]\/15, .border-\[\#C5A059\]\/10 {
+    border-color: #e5e7eb !important;
+  }
+
+  /* Ensure text colors contrast perfectly with white background */
+  .text-\[\#EAE6E1\], .text-\[\#CFCAC4\], .text-\[\#A69F96\], .text-gray-300 {
+    color: #1f2937 !important;
+  }
+  
+  .text-\[\#C5A059\] {
+    color: #b45309 !important; /* Slightly darker rich amber/gold print color */
+  }
+
+  /* Uncut table layouts */
+  .print\:overflow-visible {
+    overflow: visible !important;
+  }
+  .print\:min-w-0 {
+    min-width: 0 !important;
+  }
+  
+  table.print\:min-w-0 {
+    min-width: 0 !important;
+    width: 100% !important;
+    table-layout: auto !important;
+    margin-top: 10px !important;
+  }
+  
+  thead {
+    background: #f9fafb !important;
+  }
+  
+  th, td {
+    padding: 10px 8px !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    font-size: 9.5pt !important;
+  }
+
+  th {
+    color: #111827 !important;
+    font-weight: 700 !important;
+    border-bottom: 2px solid #d1d5db !important;
+  }
+
+  /* Make sure notes aren't clipped */
+  p.text-xs.italic {
+    font-size: 8.5pt !important;
+    color: #4b5563 !important;
+    white-space: normal !important;
+  }
+
+  /* Avoid cutting off cards halfway */
+  .break-inside-avoid, section, tr {
+    break-inside: avoid !important;
   }
 }

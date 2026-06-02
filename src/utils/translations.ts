@@ -100,7 +100,7 @@ export const translations = {
     // Results Page
     res_verified_badge: "Kalkulasi Sukses Terverifikasi Faraid",
     res_report_title: "Laporan Ahli Waris:",
-    res_btn_print: "Cetak PDF / Print",
+    res_btn_print: "Unduh Laporan PDF",
     res_btn_save: "Simpan Ke Akun",
     res_btn_saved_ok: "Tersimpan di Akun",
     res_btn_recalc: "Kalkulasi Baru",
@@ -248,7 +248,7 @@ export const translations = {
     // Results Page
     res_verified_badge: "Verified Faraid Calculation Success",
     res_report_title: "Heir Report For:",
-    res_btn_print: "Print / Save PDF",
+    res_btn_print: "Download PDF Report",
     res_btn_save: "Save to Account",
     res_btn_saved_ok: "Saved to Account",
     res_btn_recalc: "New Calculation",

@@ -108,6 +108,15 @@ export default function App() {
 
   const handleLoginSuccess = (user: { name: string; email: string }) => {
     setCurrentUser(user);
+    
+    // Load existing simulated reports for this specific email to prevent data loss on re-login
+    const storedSimulated = localStorage.getItem(`warisku_reports_simulated_${user.email}`);
+    if (storedSimulated) {
+      setSavedReports(JSON.parse(storedSimulated));
+    } else {
+      setSavedReports([]);
+    }
+    
     setScreen('wizard'); // Auto transitioned to wizard after login
   };
 
