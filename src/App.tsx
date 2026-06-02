@@ -42,6 +42,7 @@ export default function App() {
         };
         setCurrentUser(uProfile);
         localStorage.setItem('warisku_current_user', JSON.stringify(uProfile));
+        localStorage.removeItem('warisku_simulated_user');
 
         // Realtime sync reports archive from Firestore subcollection ordered by creation date
         const reportsPath = `users/${firebaseUser.uid}/reports`;
@@ -65,6 +66,25 @@ export default function App() {
           unsubSnapshot();
         };
       } else {
+        // If there's a simulated offline user logged in, preserve it!
+        const simulatedUserStr = localStorage.getItem('warisku_simulated_user');
+        if (simulatedUserStr) {
+          try {
+            const simulatedUser = JSON.parse(simulatedUserStr);
+            setCurrentUser(simulatedUser);
+            // Load simulated user reports
+            const storedSimulated = localStorage.getItem(`warisku_reports_simulated_${simulatedUser.email}`);
+            if (storedSimulated) {
+              setSavedReports(JSON.parse(storedSimulated));
+            } else {
+              setSavedReports([]);
+            }
+            return;
+          } catch (e) {
+            console.error('Error loading simulated user reports:', e);
+          }
+        }
+
         setCurrentUser(null);
         setSavedReports([]);
         localStorage.removeItem('warisku_current_user');
@@ -95,13 +115,17 @@ export default function App() {
     try {
       await signOut(auth);
       localStorage.removeItem('warisku_current_user');
+      localStorage.removeItem('warisku_simulated_user');
       setCurrentUser(null);
       setSavedReports([]);
       setScreen('landing');
     } catch (error) {
       console.error('Logout error:', error);
       // Fallback
+      localStorage.removeItem('warisku_current_user');
+      localStorage.removeItem('warisku_simulated_user');
       setCurrentUser(null);
+      setSavedReports([]);
       setScreen('landing');
     }
   };
@@ -131,6 +155,16 @@ export default function App() {
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, path);
       }
+    } else if (currentUser) {
+      // Offline simulated user reports
+      const enrichedReport = {
+        ...report,
+        userId: currentUser.email,
+        createdAt: new Date().toISOString()
+      };
+      const updated = [enrichedReport, ...savedReports];
+      setSavedReports(updated);
+      localStorage.setItem(`warisku_reports_simulated_${currentUser.email}`, JSON.stringify(updated));
     } else {
       // Offline guest reports
       const updated = [report, ...savedReports];
@@ -148,6 +182,11 @@ export default function App() {
       } catch (err) {
         handleFirestoreError(err, OperationType.DELETE, path);
       }
+    } else if (currentUser) {
+      // Simulated user report deletion
+      const updated = savedReports.filter((r) => r.id_hasil !== id);
+      setSavedReports(updated);
+      localStorage.setItem(`warisku_reports_simulated_${currentUser.email}`, JSON.stringify(updated));
     } else {
       const updated = savedReports.filter((r) => r.id_hasil !== id);
       setSavedReports(updated);
