@@ -88,6 +88,10 @@
     "/users/{userId}/reports/{reportId}": {
       "schema": "reports",
       "description": "Secure, nested dynamic collection of heritage reports belonging to the user"
+    },
+    "/simulated_reports/{reportId}": {
+      "schema": "reports",
+      "description": "Dynamic persistent collection of heir calculations for simulated/semi-offline sandbox users"
     }
   }
 }

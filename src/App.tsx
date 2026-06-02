@@ -14,7 +14,7 @@ import { calculateFaraid } from './utils/faraid';
 import { translations } from './utils/translations';
 import { auth, db, handleFirestoreError, OperationType } from './utils/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, setDoc, deleteDoc, collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
 import { History, LayoutGrid } from 'lucide-react';
 
 export default function App() {
@@ -26,14 +26,16 @@ export default function App() {
 
   const t_strings = translations[lang];
 
-  // Dynamic Firebase auth listener & Firestore reports sync
+  // Language initializer
   useEffect(() => {
-    // Check if lang was saved in localStorage
     const savedLang = localStorage.getItem('warisku_lang');
     if (savedLang === 'id' || savedLang === 'en') {
       setLang(savedLang);
     }
+  }, []);
 
+  // Auth State Listener
+  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         const uProfile = {
@@ -43,62 +45,91 @@ export default function App() {
         setCurrentUser(uProfile);
         localStorage.setItem('warisku_current_user', JSON.stringify(uProfile));
         localStorage.removeItem('warisku_simulated_user');
-
-        // Realtime sync reports archive from Firestore subcollection ordered by creation date
-        const reportsPath = `users/${firebaseUser.uid}/reports`;
-        const q = query(
-          collection(db, 'users', firebaseUser.uid, 'reports'),
-          orderBy('createdAt', 'desc')
-        );
-
-        const unsubSnapshot = onSnapshot(q, (snapshot) => {
-          const fetched: CalculationResult[] = [];
-          snapshot.forEach((docSnap) => {
-            fetched.push(docSnap.data() as CalculationResult);
-          });
-          setSavedReports(fetched);
-          localStorage.setItem('warisku_saved_reports', JSON.stringify(fetched));
-        }, (error) => {
-          handleFirestoreError(error, OperationType.LIST, reportsPath);
-        });
-
-        return () => {
-          unsubSnapshot();
-        };
       } else {
-        // If there's a simulated offline user logged in, preserve it!
         const simulatedUserStr = localStorage.getItem('warisku_simulated_user');
         if (simulatedUserStr) {
           try {
             const simulatedUser = JSON.parse(simulatedUserStr);
             setCurrentUser(simulatedUser);
-            // Load simulated user reports
-            const storedSimulated = localStorage.getItem(`warisku_reports_simulated_${simulatedUser.email}`);
-            if (storedSimulated) {
-              setSavedReports(JSON.parse(storedSimulated));
-            } else {
-              setSavedReports([]);
-            }
-            return;
           } catch (e) {
-            console.error('Error loading simulated user reports:', e);
+            console.error('Error parsing simulated user:', e);
+            setCurrentUser(null);
+            localStorage.removeItem('warisku_current_user');
           }
-        }
-
-        setCurrentUser(null);
-        setSavedReports([]);
-        localStorage.removeItem('warisku_current_user');
-        
-        // Load offline guest reports from local persistence
-        const storedReports = localStorage.getItem('warisku_saved_reports_guest');
-        if (storedReports) {
-          setSavedReports(JSON.parse(storedReports));
+        } else {
+          setCurrentUser(null);
+          localStorage.removeItem('warisku_current_user');
         }
       }
     });
 
     return () => unsubscribe();
   }, []);
+
+  // Multi-Mode Dynamic Firestore Reports Syncing
+  useEffect(() => {
+    if (!currentUser) {
+      // Load offline guest reports from local persistence
+      const storedReports = localStorage.getItem('warisku_saved_reports_guest');
+      if (storedReports) {
+        setSavedReports(JSON.parse(storedReports));
+      } else {
+        setSavedReports([]);
+      }
+      return;
+    }
+
+    let unsubSnapshot: () => void = () => {};
+
+    if (auth.currentUser) {
+      // Real authenticated user reports
+      const reportsPath = `users/${auth.currentUser.uid}/reports`;
+      const q = query(
+        collection(db, 'users', auth.currentUser.uid, 'reports'),
+        orderBy('createdAt', 'desc')
+      );
+
+      unsubSnapshot = onSnapshot(q, (snapshot) => {
+        const fetched: CalculationResult[] = [];
+        snapshot.forEach((docSnap) => {
+          fetched.push(docSnap.data() as CalculationResult);
+        });
+        setSavedReports(fetched);
+        localStorage.setItem('warisku_saved_reports', JSON.stringify(fetched));
+      }, (error) => {
+        handleFirestoreError(error, OperationType.LIST, reportsPath);
+      });
+    } else {
+      // Simulated user syncing with real Firestore (with localStorage fallback)
+      const cached = localStorage.getItem(`warisku_reports_simulated_${currentUser.email}`);
+      if (cached) {
+        try {
+          setSavedReports(JSON.parse(cached));
+        } catch (e) {}
+      }
+
+      const q = query(
+        collection(db, 'simulated_reports'),
+        where('userId', '==', currentUser.email),
+        orderBy('createdAt', 'desc')
+      );
+
+      unsubSnapshot = onSnapshot(q, (snapshot) => {
+        const fetched: CalculationResult[] = [];
+        snapshot.forEach((docSnap) => {
+          fetched.push(docSnap.data() as CalculationResult);
+        });
+        setSavedReports(fetched);
+        localStorage.setItem(`warisku_reports_simulated_${currentUser.email}`, JSON.stringify(fetched));
+      }, (error) => {
+        console.error('Error listing simulated reports from firestore:', error);
+      });
+    }
+
+    return () => {
+      unsubSnapshot();
+    };
+  }, [currentUser]);
 
   const handleLanguageToggle = () => {
     const nextLang = lang === 'id' ? 'en' : 'id';
@@ -165,15 +196,28 @@ export default function App() {
         handleFirestoreError(err, OperationType.WRITE, path);
       }
     } else if (currentUser) {
-      // Offline simulated user reports
-      const enrichedReport = {
-        ...report,
-        userId: currentUser.email,
-        createdAt: new Date().toISOString()
-      };
-      const updated = [enrichedReport, ...savedReports];
-      setSavedReports(updated);
-      localStorage.setItem(`warisku_reports_simulated_${currentUser.email}`, JSON.stringify(updated));
+      // Offline simulated user reports - now dynamic and persistent via Firestore!
+      const path = `simulated_reports/${report.id_hasil}`;
+      try {
+        const reportRef = doc(db, 'simulated_reports', report.id_hasil);
+        const enrichedReport = {
+          ...report,
+          userId: currentUser.email,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(reportRef, enrichedReport);
+      } catch (err) {
+        console.error('Failed to save to database:', err);
+        // Fallback to local storage on complete network/auth block
+        const enrichedReport = {
+          ...report,
+          userId: currentUser.email,
+          createdAt: new Date().toISOString()
+        };
+        const updated = [enrichedReport, ...savedReports];
+        setSavedReports(updated);
+        localStorage.setItem(`warisku_reports_simulated_${currentUser.email}`, JSON.stringify(updated));
+      }
     } else {
       // Offline guest reports
       const updated = [report, ...savedReports];
@@ -192,10 +236,18 @@ export default function App() {
         handleFirestoreError(err, OperationType.DELETE, path);
       }
     } else if (currentUser) {
-      // Simulated user report deletion
-      const updated = savedReports.filter((r) => r.id_hasil !== id);
-      setSavedReports(updated);
-      localStorage.setItem(`warisku_reports_simulated_${currentUser.email}`, JSON.stringify(updated));
+      // Simulated user report deletion - now dynamic and persistent via Firestore!
+      const path = `simulated_reports/${id}`;
+      try {
+        const reportRef = doc(db, 'simulated_reports', id);
+        await deleteDoc(reportRef);
+      } catch (err) {
+        console.error('Failed to delete from database:', err);
+        // Fallback local removal
+        const updated = savedReports.filter((r) => r.id_hasil !== id);
+        setSavedReports(updated);
+        localStorage.setItem(`warisku_reports_simulated_${currentUser.email}`, JSON.stringify(updated));
+      }
     } else {
       const updated = savedReports.filter((r) => r.id_hasil !== id);
       setSavedReports(updated);

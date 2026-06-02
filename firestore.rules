@@ -56,5 +56,19 @@ service cloud.firestore {
       allow update: if false; // Faraid reports are historically immutable and cannot be altered
       allow delete: if isOwner(userId) && isValidId(reportId);
     }
+
+    // Dynamic simulated reports for iframe sandbox fallback
+    match /simulated_reports/{reportId} {
+      allow get: if true;
+      allow list: if resource.data.userId is string && resource.data.userId.size() <= 100;
+      allow create: if isValidId(reportId)
+        && incoming().id_hasil == reportId
+        && incoming().userId is string && incoming().userId.size() <= 100
+        && incoming().nama_pewaris is string && incoming().nama_pewaris.size() <= 200
+        && incoming().tirkah is number
+        && incoming().createdAt != null;
+      allow update: if false; // Reports are historically immutable
+      allow delete: if isValidId(reportId) && resource.data.userId is string && resource.data.userId.size() <= 100;
+    }
   }
 }
