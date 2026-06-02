@@ -1,0 +1,6 @@
+{
+  "name": "Warisku",
+  "description": "Kalkulator dan Simulator Waris Faraid Syariah Terpercaya, Modern, dan Presisi untuk Keluarga Muslim Indonesia.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

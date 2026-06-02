@@ -1,0 +1,93 @@
+{
+  "entities": {
+    "users": {
+      "title": "User",
+      "description": "Secure user profile in the database",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Authentication UID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full user name"
+        },
+        "email": {
+          "type": "string",
+          "description": "User's verified email address"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp of user creation"
+        }
+      },
+      "required": [
+        "uid",
+        "name",
+        "email",
+        "createdAt"
+      ]
+    },
+    "reports": {
+      "title": "FaraidCalculationReport",
+      "description": "A single Faraid inheritance report created by the user",
+      "type": "object",
+      "properties": {
+        "id_hasil": {
+          "type": "string",
+          "description": "Unique report hash ID"
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of the owner"
+        },
+        "nama_pewaris": {
+          "type": "string",
+          "description": "Deceased relative's label or name"
+        },
+        "tirkah": {
+          "type": "number",
+          "description": "Calculated net wealth to divide"
+        },
+        "financials": {
+          "type": "object",
+          "description": "Full breakdown of gross estate, debts, funeral costs, and bequest"
+        },
+        "heirs": {
+          "type": "array",
+          "description": "Calculated heir categories and their net inheritance amounts"
+        },
+        "appliedCalculations": {
+          "type": "object",
+          "description": "Flags verifying the usage of Aul, Radd, or Gharrawain adjustments"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server calculation timestamp"
+        }
+      },
+      "required": [
+        "id_hasil",
+        "userId",
+        "nama_pewaris",
+        "tirkah",
+        "heirs",
+        "appliedCalculations",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "Secure user registration document indexed by authentic auth UID"
+    },
+    "/users/{userId}/reports/{reportId}": {
+      "schema": "reports",
+      "description": "Secure, nested dynamic collection of heritage reports belonging to the user"
+    }
+  }
+}
