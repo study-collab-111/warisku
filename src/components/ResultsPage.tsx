@@ -5,8 +5,6 @@
 
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-// @ts-ignore
-import html2pdf from 'html2pdf.js';
 import { 
   Printer, 
   RefreshCw, 
@@ -51,206 +49,191 @@ export default function ResultsPage({
     window.print();
   };
 
-  // Direct high-fidelity PDF generation and local save to prevent browser redirect/print popups
-  const handlePdfDownload = () => {
-    const tempDiv = document.createElement('div');
-    tempDiv.style.position = 'absolute';
-    tempDiv.style.left = '-9999px';
-    tempDiv.style.top = '-9999px';
-    tempDiv.style.width = '794px'; // A4 page width at standard 96 DPI
-    tempDiv.style.backgroundColor = '#ffffff';
-    tempDiv.style.color = '#1e293b';
-    tempDiv.style.padding = '45px';
-    tempDiv.style.fontFamily = '"Inter", sans-serif';
+  // High-fidelity Word Document (.doc) generator for Microsoft Word / Google Docs.
+  // MS Word natively parses clean HTML and inline CSS properties, ensuring perfect rendering on the user's desktop.
+  const handleDocDownload = () => {
+    const isId = lang === 'id';
+    
+    const cssStyles = `
+      <style>
+        body { font-family: 'Arial', sans-serif; color: #1e293b; line-height: 1.5; }
+        h1 { color: #b45309; font-size: 24pt; margin-bottom: 5px; font-weight: bold; }
+        h2 { color: #0f172a; font-size: 16pt; text-align: center; margin-top: 20px; font-weight: bold; }
+        h3 { color: #b45309; font-size: 18pt; margin: 0; font-weight: bold; }
+        h4 { color: #0f172a; font-size: 11pt; border-bottom: 1px solid #cbd5e1; padding-bottom: 5px; margin-top: 20px; text-transform: uppercase; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 10pt; }
+        th { background-color: #f8fafc; border-bottom: 1px solid #cbd5e1; padding: 8px; font-weight: bold; text-align: left; }
+        td { padding: 8px; border-bottom: 1px solid #cbd5e1; text-align: left; }
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .badge { background-color: #fffbeb; color: #d97706; border: 1px solid #fde68a; padding: 4px 8px; border-radius: 9999px; font-size: 8pt; font-weight: bold; }
+        .recap-box { background-color: #fafaf9; border: 1px solid #e7e5e4; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+        .alert-box { padding: 10px; border-radius: 6px; font-size: 9pt; margin-bottom: 8px; border: 1px solid #e2e8f0; }
+        .alert-aul { background-color: #fffbeb; border-color: #fde68a; color: #78350f; }
+        .alert-radd { background-color: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+        .alert-gharrawain { background-color: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+        .footer { font-size: 8pt; color: #64748b; margin-top: 30px; border-top: 1px dashed #cbd5e1; padding-top: 15px; }
+      </style>
+    `;
 
-    const heirsRowsHTML = heirs.map((h) => `
-      <tr style="border-bottom: 1px solid #e2e8f0;">
-        <td style="padding: 12px 10px; font-size: 13px; font-weight: bold; color: #0f172a; text-align: left;">
-          ${h.name}
-          <div style="font-size: 11px; font-weight: normal; color: #64748b; font-style: italic; margin-top: 3px;">
-            ${h.notes}
+    let htmlContent = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8">
+        <title>${isId ? 'Laporan Hasil Pembagian Warisan' : 'Islamic Inheritance Report'}</title>
+        ${cssStyles}
+      </head>
+      <body>
+        <!-- Header banner table -->
+        <table style="width: 100%; border: none; margin-bottom: 20px;">
+          <tr style="border: none;">
+            <td style="border: none; padding: 2px;">
+              <h1>WARISKU</h1>
+              <div style="font-size: 9pt; color: #64748b; text-transform: uppercase; font-weight: bold;">
+                ${isId ? 'Platform Perhitungan Faraid & Waris Syariah Digital' : 'Digital Faraid & Sharia Inheritance Platform'}
+              </div>
+            </td>
+            <td style="border: none; text-align: right; padding: 2px; vertical-align: middle;">
+              <span class="badge">Official Sharia Compliant</span>
+              <div style="font-size: 9pt; color: #64748b; margin-top: 8px; font-family: monospace;">
+                ID: ${result.id_hasil.substring(0, 8).toUpperCase()}
+              </div>
+            </td>
+          </tr>
+        </table>
+
+        <hr style="border: none; border-top: 3px double #d97706;" />
+
+        <!-- Title block -->
+        <div style="text-align: center; margin-bottom: 25px; margin-top: 15px;">
+          <h2>${isId ? 'LAPORAN HASIL PEMBAGIAN WARISAN (FARAID)' : 'OFFICIAL ISLAMIC INHERITANCE (FARAID) REPORT'}</h2>
+          <div style="margin: 10px auto; font-size: 11pt; color: #334155;">
+            ${isId ? 'Atas Pewaris Alm/Almh:' : 'For Deceased:'} <strong>${nama_pewaris}</strong>
           </div>
-        </td>
-        <td style="padding: 12px 10px; font-size: 11px; text-align: center;">
-          <span style="background-color: #f1f5f9; color: #475569; padding: 2px 8px; border-radius: 9999px; font-weight: bold; border: 1px solid #e2e8f0; font-size: 10px;">
-            ${h.category}
-          </span>
-        </td>
-        <td style="padding: 12px 10px; font-size: 12px; text-align: center; font-weight: bold; font-family: monospace; color: #475569;">
-          ${h.originalShareText}
-        </td>
-        <td style="padding: 12px 10px; font-size: 13px; text-align: center; font-weight: bold; font-family: monospace; color: #0f172a;">
-          ${h.percentage}%
-        </td>
-        <td style="padding: 12px 10px; font-size: 14px; text-align: right; font-weight: 800; font-family: monospace; color: #b45309;">
-          ${formatIDR(h.nominalValue)}
-        </td>
-      </tr>
-    `).join('');
-
-    const activeKaidahHTML = [];
-    if (appliedCalculations.hasAul) {
-      activeKaidahHTML.push(`
-        <div style="background-color: #fffbeb; border: 1px solid #fde68a; padding: 12px; border-radius: 8px; font-size: 11px; color: #78350f;">
-          <strong>Aul (Penyesuaian Ekuitas)</strong>: Terdeteksi porsi hak melebihi penyebut, bagian porsi ekuitas disesuaikan proporsional.
-        </div>
-      `);
-    }
-    if (appliedCalculations.hasRadd) {
-      activeKaidahHTML.push(`
-        <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 12px; border-radius: 8px; font-size: 11px; color: #166534;">
-          <strong>Radd (Pengembalian Sisa)</strong>: Surplus sisa pembagian dikembalikan proporsional kepada ahli waris yang berhak.
-        </div>
-      `);
-    }
-    if (appliedCalculations.hasGharrawain) {
-      activeKaidahHTML.push(`
-        <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; padding: 12px; border-radius: 8px; font-size: 11px; color: #1e40af;">
-          <strong>Gharrawain (Bapak - Ibu)</strong>: Formulasi porsi ibu disesuaikan menjadi 1/3 dari sisa setelah bagian suami/istri.
-        </div>
-      `);
-    }
-
-    const appliedKaidahSection = activeKaidahHTML.length > 0 ? `
-      <div style="margin-bottom: 25px;">
-        <h4 style="font-size: 13px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px;">
-          Metode & Penyesuaian Syariah Terbaca
-        </h4>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          ${activeKaidahHTML.join('')}
-        </div>
-      </div>
-    ` : '';
-
-    tempDiv.innerHTML = `
-      <div style="padding: 10px; border: 4px double #d97706; border-radius: 4px; background-color: #ffffff;">
-        <!-- Brand Header Banner -->
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px double #d97706; padding-bottom: 15px; margin-bottom: 20px;">
-          <div style="text-align: left;">
-            <h1 style="font-size: 26px; font-weight: 900; letter-spacing: -0.5px; color: #b45309; font-family: 'Playfair Display', Georgia, serif; margin: 0;">
-              WARISKU
-            </h1>
-            <p style="font-size: 10px; color: #64748b; margin: 2px 0 0 0; text-transform: uppercase; font-weight: 700; letter-spacing: 1px;">
-              Platform Perhitungan Faraid & Waris Syariah Digital
-            </p>
-          </div>
-          <div style="text-align: right;">
-            <span style="font-size: 9px; font-weight: bold; background-color: #fef3c7; color: #d97706; border: 1px solid #fde68a; padding: 3px 8px; border-radius: 9999px;">
-              OFFICIAL SHARIA COMPLIANT
-            </span>
-            <p style="font-size: 11px; color: #64748b; margin: 5px 0 0 0; font-family: monospace;">
-              ID: ${result.id_hasil.substring(0, 8).toUpperCase()}
-            </p>
+          <div style="font-size: 9pt; color: #64748b;">
+            ${isId ? 'Dicetak Tanggal' : 'Generated On'}: ${new Date().toLocaleDateString(isId ? 'id-ID' : 'en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
 
-        <!-- Document Title -->
-        <div style="text-align: center; margin-bottom: 22px;">
-          <h2 style="font-size: 18px; font-weight: bold; text-transform: uppercase; color: #0f172a; margin: 0; font-family: 'Playfair Display', serif;">
-            LAPORAN HASIL PEMBAGIAN WARISAN (FARAID)
-          </h2>
-          <div style="width: 60px; height: 3px; background-color: #d97706; margin: 8px auto 6px auto;"></div>
-          <p style="font-size: 12px; color: #475569; margin: 0;">
-            Atas Pewaris Alm/Almh: <strong style="color: #0f172a;">${nama_pewaris}</strong>
-          </p>
-          <p style="font-size: 10px; color: #64748b; margin: 3px 0 0 0;">
-            Dicetak Tanggal: ${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-          </p>
-        </div>
+        <!-- Section 1: Financial Recapitulation -->
+        <div class="recap-box">
+          <table style="width: 100%; border: none; margin-bottom: 10px;">
+            <tr style="border: none;">
+              <td style="border: none; padding: 2px;">
+                <div style="font-size: 8pt; font-weight: bold; color: #b45309; text-transform: uppercase;">
+                  ${isId ? 'TOTAL HARTA BERSIH (TIRKAH)' : 'TOTAL NET ESTATE (TIRKAH)'}
+                </div>
+                <h3>${formatIDR(tirkah)}</h3>
+              </td>
+              <td style="border: none; text-align: right; color: #64748b; font-size: 9pt; max-width: 300px; padding: 2px; vertical-align: middle;">
+                ${isId ? 'Aset bersih yang siap dibagikan ke ahli waris setelah dikurangi seluruh kewajiban jenazah & wasiat wajib.' : 'Net inheritable estate ready for distribution after settling all liabilities, funeral costs, and valid bequests.'}
+              </td>
+            </tr>
+          </table>
 
-        <!-- Section 1: Financial Recapitulation Table & Banner -->
-        <div style="background-color: #fafaf9; border: 1px solid #e7e5e4; border-radius: 12px; padding: 20px; margin-bottom: 25px; text-align: left;">
-          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e7e5e4; padding-bottom: 12px; margin-bottom: 12px;">
-            <div>
-              <span style="font-size: 10px; font-weight: 800; color: #b45309; text-transform: uppercase; letter-spacing: 0.5px;">
-                TOTAL HARTA BERSIH (TIRKAH)
-              </span>
-              <h3 style="font-size: 24px; font-weight: 900; color: #b45309; margin: 3px 0 0 0; font-family: 'Playfair Display', serif;">
-                ${formatIDR(tirkah)}
-              </h3>
-            </div>
-            <div style="font-size: 11px; text-align: right; color: #64748b; max-width: 280px; line-height: 1.4;">
-              Aset bersih yang siap dibagikan ke ahli waris setelah dikurangi seluruh kewajiban jenazah & wasiat wajib.
-            </div>
-          </div>
-
-          <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+          <table style="width: 100%; margin-top: 15px; border-top: 1px solid #e7e5e4;">
             <thead>
-              <tr style="color: #64748b; font-weight: normal; border-bottom: 1px solid #f1f5f9; text-align: center;">
-                <th style="padding: 5px; font-weight: normal;">Harta Kotor</th>
-                <th style="padding: 5px; font-weight: normal; border-left: 1px solid #e7e5e4;">Total Hutang</th>
-                <th style="padding: 5px; font-weight: normal; border-left: 1px solid #e7e5e4;">Wasiat Diambil</th>
-                <th style="padding: 5px; font-weight: normal; border-left: 1px solid #e7e5e4;">Biaya Jenazah</th>
+              <tr style="background-color: #fafaf9;">
+                <th style="padding: 6px; font-size: 8.5pt; text-align: center; font-weight: normal; color: #64748b; border: 1px solid #cbd5e1;">${isId ? 'Harta Kotor' : 'Gross Assets'}</th>
+                <th style="padding: 6px; font-size: 8.5pt; text-align: center; font-weight: normal; color: #64748b; border: 1px solid #cbd5e1;">${isId ? 'Total Hutang' : 'Total Debts'}</th>
+                <th style="padding: 6px; font-size: 8.5pt; text-align: center; font-weight: normal; color: #64748b; border: 1px solid #cbd5e1;">${isId ? 'Wasiat Diambil' : 'Bequests'}</th>
+                <th style="padding: 6px; font-size: 8.5pt; text-align: center; font-weight: normal; color: #64748b; border: 1px solid #cbd5e1;">${isId ? 'Biaya Jenazah' : 'Funeral Costs'}</th>
               </tr>
             </thead>
             <tbody>
-              <tr style="font-weight: bold; color: #011627; font-size: 12px; text-align: center;">
-                <td style="padding: 5px;">${formatIDR(financials.total_harta)}</td>
-                <td style="padding: 5px; border-left: 1px solid #e7e5e4;">${formatIDR(financials.hutang)}</td>
-                <td style="padding: 5px; border-left: 1px solid #e7e5e4;">${formatIDR(financials.wasiat)}</td>
-                <td style="padding: 5px; border-left: 1px solid #e7e5e4;">${formatIDR(financials.biaya_pemakaman)}</td>
+              <tr>
+                <td style="padding: 6px; font-size: 9pt; text-align: center; font-weight: bold; border: 1px solid #cbd5e1;">${formatIDR(financials.total_harta)}</td>
+                <td style="padding: 6px; font-size: 9pt; text-align: center; font-weight: bold; border: 1px solid #cbd5e1;">${formatIDR(financials.hutang)}</td>
+                <td style="padding: 6px; font-size: 9pt; text-align: center; font-weight: bold; border: 1px solid #cbd5e1;">${formatIDR(financials.wasiat)}</td>
+                <td style="padding: 6px; font-size: 9pt; text-align: center; font-weight: bold; border: 1px solid #cbd5e1;">${formatIDR(financials.biaya_pemakaman)}</td>
               </tr>
             </tbody>
           </table>
         </div>
 
         <!-- Section 2: Applied Kaidah Alerts -->
-        ${appliedKaidahSection}
+        ${(appliedCalculations.hasAul || appliedCalculations.hasRadd || appliedCalculations.hasGharrawain) ? `
+          <h4>${isId ? 'Metode & Penyesuaian Syariah Terbaca' : 'Special Applied Sharia Rules'}</h4>
+          <div style="margin-top: 10px; margin-bottom: 15px;">
+            ${appliedCalculations.hasAul ? `
+              <div class="alert-box alert-aul">
+                <strong>Aul (Penyesuaian Ekuitas)</strong>: Terdeteksi porsi hak melebihi penyebut, bagian porsi ekuitas disesuaikan proporsional.
+              </div>
+            ` : ''}
+            ${appliedCalculations.hasRadd ? `
+              <div class="alert-box alert-radd">
+                <strong>Radd (Pengembalian Sisa)</strong>: Surplus sisa pembagian dikembalikan proporsional kepada ahli waris yang berhak selain pasangan.
+              </div>
+            ` : ''}
+            ${appliedCalculations.hasGharrawain ? `
+              <div class="alert-box alert-gharrawain">
+                <strong>Gharrawain (Bapak - Ibu)</strong>: Formulasi porsi ibu disesuaikan menjadi 1/3 dari sisa setelah bagian suami/istri.
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
 
         <!-- Section 3: Exact Shares Table -->
-        <div style="margin-bottom: 25px;">
-          <h4 style="font-size: 13px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; color: #0f172a; border-bottom: 2px solid #e2e8f0; padding-bottom: 5px; text-align: left;">
-            Rincian Pembagian Ahli Waris (${heirs.length} Ahli Waris Terdaftar)
-          </h4>
-          <table style="width: 100%; border-collapse: collapse; margin-top: 5px;">
-            <thead>
-              <tr style="background-color: #f8fafc; border-bottom: 2px solid #cbd5e1; font-size: 11px; color: #475569; text-transform: uppercase; font-weight: bold;">
-                <th style="padding: 10px; text-align: left; width: 35%;">Nama Ahli Waris</th>
-                <th style="padding: 10px; text-align: center; width: 20%;">Golongan</th>
-                <th style="padding: 10px; text-align: center; width: 15%;">Bagian Faraid</th>
-                <th style="padding: 10px; text-align: center; width: 15%;">Persentase</th>
-                <th style="padding: 10px; text-align: right; width: 15%;">Ketentuan Nominal</th>
+        <h4>${isId ? `Rincian Pembagian Ahli Waris (${heirs.length} Terdaftar)` : `Heirs Quotas Breakdown (${heirs.length} Registered)`}</h4>
+        <table style="width: 100%; border: 1px solid #cbd5e1; margin-top: 10px;">
+          <thead>
+            <tr style="background-color: #f8fafc;">
+              <th style="width: 35%; border: 1px solid #cbd5e1; padding: 8px;">${isId ? 'Nama Ahli Waris / Hubungan' : 'Heir Name / Relation'}</th>
+              <th style="width: 20%; border: 1px solid #cbd5e1; padding: 8px; text-align: center;">${isId ? 'Golongan' : 'Category'}</th>
+              <th style="width: 15%; border: 1px solid #cbd5e1; padding: 8px; text-align: center;">${isId ? 'Bagian Faraid' : 'Faraid Share'}</th>
+              <th style="width: 15%; border: 1px solid #cbd5e1; padding: 8px; text-align: center;">${isId ? 'Persentase' : 'Percentage'}</th>
+              <th style="width: 15%; border: 1px solid #cbd5e1; padding: 8px; text-align: right;">${isId ? 'Nominal Akhir' : 'Final Value'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${heirs.map((h) => `
+              <tr>
+                <td style="border: 1px solid #cbd5e1; padding: 8px;">
+                  <div style="font-weight: bold; font-size: 10pt; color: #0f172a;">${h.name}</div>
+                  <div style="font-size: 8pt; color: #64748b; font-style: italic; margin-top: 2px;">${h.notes}</div>
+                </td>
+                <td style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; font-size: 8.5pt;">
+                  <strong>${h.category}</strong>
+                </td>
+                <td style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; font-weight: bold; font-family: monospace; color: #475569; font-size: 9.5pt;">${h.originalShareText}</td>
+                <td style="border: 1px solid #cbd5e1; padding: 8px; text-align: center; font-weight: bold; font-family: monospace; color: #0f172a; font-size: 9.5pt;">${h.percentage}%</td>
+                <td style="border: 1px solid #cbd5e1; padding: 8px; text-align: right; font-weight: bold; font-family: monospace; color: #b45309; font-size: 10.5pt;">${formatIDR(h.nominalValue)}</td>
               </tr>
-            </thead>
-            <tbody>
-              ${heirsRowsHTML}
-            </tbody>
-          </table>
-        </div>
+            `).join('')}
+          </tbody>
+        </table>
 
-        <!-- Section 4: Dalil & legal reference footnote footer -->
-        <div style="margin-top: 30px; border-top: 1px dashed #cbd5e1; padding-top: 15px; font-size: 10px; color: #64748b; line-height: 1.5; text-align: left;">
-          <strong style="color: #475569; display: block; margin-bottom: 5px; text-transform: uppercase; font-size: 11px;">Rujukan Landasan Hukum:</strong>
-          - QS. An-Nisa (4:11): Bagian bagi keturunan laki-laki setara porsi dua bagian anak perempuan.<br/>
-          - Fiqh Faraid: Sisa pembagian (Ashabah) disebarkan menurut proporsi silsilah nasab sedarah.<br/>
-          - Kompilasi Hukum Islam (KHI) sanksi waris di Indonesia & Keputusan Fatwa Ulama.<br/>
-          <div style="margin-top: 15px; text-align: center; border-top: 1px solid #f1f5f9; padding-top: 10px; font-weight: bold; color: #94a3b8; font-size: 9px; text-transform: uppercase; letter-spacing: 1px;">
-            SAH SECARA SYARIAH • GENERATED BY WARISKU
-          </div>
-        </div>
-      </div>
+        <!-- Section 4: Footnote/Dalil References -->
+        <table class="footer" style="width: 100%; border: none; margin-top: 30px;">
+          <tr>
+            <td style="border: none; padding: 0;">
+              <strong style="color: #475569; display: block; margin-bottom: 5px; text-transform: uppercase; font-size: 9pt;">
+                ${isId ? 'Rujukan Hukum & Keabsahan:' : 'Legal Framework:'}
+              </strong>
+              <div style="font-size: 8.5pt; color: #64748b; line-height: 1.4;">
+                • QS. An-Nisa (4:11): Ketentuan porsi waris anak laki-laki senilai dua kali bagian anak perempuan.<br>
+                • Fiqh Islam: Kewajiban pemakaman (Tajhiz), penyelesaian hutang, dan wasiat wajib ditunaikan sebelum fardh pembagian.<br>
+                • Di Indonesia mengacu pada Instruksi Presiden No. 1 Tahun 1991 tentang Kompilasi Hukum Islam (KHI).
+              </div>
+              <div style="text-align: center; font-weight: bold; color: #94a3b8; font-size: 8pt; text-transform: uppercase; margin-top: 30px;">
+                ${isId ? 'DOKUMEN RESMI WARISKU • SAH SECARA SYARIAH' : 'OFFICIAL DOCUMENT WARISKU • SHARIA COMPLIANT'}
+              </div>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `;
 
-    document.body.appendChild(tempDiv);
-
-    const opt = {
-      margin: 10,
-      filename: `Laporan_Waris_Faraid_${nama_pewaris.replace(/\s+/g, '_')}.pdf`,
-      image: { type: 'jpeg' as const, quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
-      jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
-    };
-
-    html2pdf().from(tempDiv).set(opt).save()
-      .then(() => {
-        document.body.removeChild(tempDiv);
-      })
-      .catch((err: any) => {
-        console.error('PDF direct generation failed:', err);
-        document.body.removeChild(tempDiv);
-        // Fallback default print dialog if completely blocked
-        window.print();
-      });
+    const blob = new Blob(['\ufeff' + htmlContent], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Laporan_Waris_Faraid_${nama_pewaris.replace(/\s+/g, '_')}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handleSave = () => {
@@ -491,9 +474,9 @@ export default function ResultsPage({
           </button>
 
           <button 
-            onClick={handlePdfDownload}
+            onClick={handleDocDownload}
             className="flex items-center gap-2 text-xs font-bold bg-[#C5A059]/20 text-[#EAE6E1] border border-[#C5A059]/45 px-5 py-3 rounded-full hover:bg-[#C5A059]/35 active:scale-95 transition-all shadow-md cursor-pointer"
-            title={lang === 'id' ? 'Unduh PDF Laporan' : 'Download PDF Report'}
+            title={lang === 'id' ? 'Unduh Dokumen Word (.doc)' : 'Download Word Document (.doc)'}
           >
             <FileDown className="w-4 h-4 text-[#C5A059]" />
             <span>{t_strings.res_btn_print}</span>
