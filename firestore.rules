@@ -27,20 +27,50 @@ service cloud.firestore {
       return resource.data;
     }
 
+    function isAdmin() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Admin';
+    }
+
     // User profiles matching authentication uid
     match /users/{userId} {
-      allow get: if isOwner(userId);
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
       allow create: if isOwner(userId) 
         && incoming().uid == userId
         && incoming().name is string && incoming().name.size() <= 100
         && incoming().email is string && incoming().email.size() <= 100
-        && incoming().createdAt != null;
-      allow update: if isOwner(userId)
+        && incoming().createdAt != null
+        && (
+          (incoming().email == "ekowirsabits@gmail.com" && incoming().role == "Admin" && incoming().approved == true) ||
+          (incoming().email != "ekowirsabits@gmail.com" && incoming().role == "User" && incoming().approved == false)
+        );
+      allow update: if (isOwner(userId)
         && incoming().uid == userId
         && incoming().name is string && incoming().name.size() <= 100
         && incoming().email is string && incoming().email.size() <= 100
-        && incoming().createdAt == existing().createdAt;
-      allow delete: if false; // Profiles are permanent from the client
+        && incoming().createdAt == existing().createdAt
+        && incoming().role == existing().role
+        && incoming().approved == existing().approved)
+        || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Scholar contacts database
+    match /ustadz/{ustadzId} {
+      allow get, list: if true;
+      allow create: if isAdmin()
+        && isValidId(ustadzId)
+        && incoming().id == ustadzId
+        && incoming().name is string && incoming().name.size() <= 150
+        && incoming().phone is string && incoming().phone.size() <= 30;
+      allow update: if isAdmin()
+        && isValidId(ustadzId)
+        && incoming().id == ustadzId
+        && incoming().name is string && incoming().name.size() <= 150
+        && incoming().phone is string && incoming().phone.size() <= 30;
+      allow delete: if isAdmin() && isValidId(ustadzId);
     }
 
     // Report archives nested inside user profiles
@@ -69,6 +99,11 @@ service cloud.firestore {
         && incoming().createdAt != null;
       allow update: if false; // Reports are historically immutable
       allow delete: if isValidId(reportId) && resource.data.userId is string && resource.data.userId.size() <= 100;
+    }
+
+    // Dynamic simulated users for iframe database fallback
+    match /simulated_users/{userId} {
+      allow get, list, create, update, delete: if true;
     }
   }
 }

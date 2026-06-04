@@ -19,7 +19,7 @@ import {
   BookOpen,
   GitFork
 } from 'lucide-react';
-import { FinancialData, Heir, RelationshipType } from '../types';
+import { FinancialData, Heir, RelationshipType, AssetDetail } from '../types';
 import { translations } from '../utils/translations';
 
 interface WizardPageProps {
@@ -79,6 +79,32 @@ export default function WizardPage({
   const [financials, setFinancials] = useState<FinancialData>(initialFinancials);
   const [heirs, setHeirs] = useState<Heir[]>(initialHeirs);
   const [wasiatWarning, setWasiatWarning] = useState(false);
+
+  const [assetDetails, setAssetDetails] = useState<AssetDetail[]>(() => {
+    if (initialFinancials.harta_rincian && initialFinancials.harta_rincian.length > 0) {
+      return initialFinancials.harta_rincian;
+    }
+    return [
+      { id: '1', name: lang === 'id' ? 'Uang Tunai / Tabungan' : 'Cash / Savings', value: 500000000 },
+      { id: '2', name: lang === 'id' ? 'Properti / Tanah / Rumah' : 'Properties / Land', value: 800000000 },
+      { id: '3', name: lang === 'id' ? 'Kendaraan (Mobil/Motor)' : 'Vehicles (Cars/Motorcycles)', value: 150000000 },
+      { id: '4', name: lang === 'id' ? 'Emas / Perhiasan / Logam Mulia' : 'Gold & Precious Metals', value: 50000000 }
+    ];
+  });
+
+  const updateAssetDetails = (newDetails: AssetDetail[]) => {
+    setAssetDetails(newDetails);
+    const sum = newDetails.reduce((acc, curr) => acc + curr.value, 0);
+    const updated = {
+      ...financials,
+      total_harta: sum,
+      harta_rincian: newDetails
+    };
+    
+    const isOver = financials.wasiat > sum / 3;
+    setWasiatWarning(isOver);
+    setFinancials(updated);
+  };
 
   // Stepper UI representation
   const [currentWizardSubstep, setCurrentWizardSubstep] = useState<'profile' | 'heirs'>('profile');
@@ -298,21 +324,84 @@ export default function WizardPage({
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-bold text-[#CFCAC4] mb-1.5">
-                          {t_strings.input_harta}
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-[#C5A059]/80">Rp</span>
-                          <input 
-                            type="number"
-                            value={financials.total_harta}
-                            onChange={(e) => handleFinancialChange('total_harta', Number(e.target.value))}
-                            placeholder="0"
-                            className="w-full pl-10 pr-4 py-3 bg-[#16171a] border border-[#C5A059]/20 rounded-xl text-sm font-mono font-bold focus:ring-2 focus:ring-[#C5A059] focus:outline-none text-[#EAE6E1]"
-                          />
+                      <div className="sm:col-span-2 bg-[#16171a]/40 p-5 rounded-2xl border border-[#C5A059]/10 space-y-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <h3 className="text-xs font-bold text-[#EAE6E1] uppercase tracking-wide">
+                              {lang === 'id' ? 'Rincian Sumber Harta Kotor' : 'Gross Estate Source Itemization'}
+                            </h3>
+                            <p className="text-[10px] text-[#A69F96]">
+                              {lang === 'id' ? 'Tentukan pos sumber kekayaan sebelum dikurangi utang & wasiat.' : 'Add or modify different assets to automatically compute total gross estate.'}
+                            </p>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newId = Math.random().toString(36).substring(7);
+                              const updated = [...assetDetails, { id: newId, name: lang === 'id' ? 'Aset Lain-lain' : 'Other Asset', value: 0 }];
+                              updateAssetDetails(updated);
+                            }}
+                            className="bg-[#C5A059]/10 hover:bg-[#C5A059]/20 text-[#C5A059] border border-[#C5A059]/30 px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>{lang === 'id' ? 'Tambah Pos Harta' : 'Add Asset'}</span>
+                          </button>
                         </div>
-                        <p className="text-[10px] text-gray-500 mt-1 leading-relaxed">{t_strings.input_harta_help}</p>
+
+                        {/* Itemized list of assets */}
+                        <div className="space-y-2.5">
+                          {assetDetails.map((asset) => (
+                            <div key={asset.id} className="flex items-center gap-3 bg-[#111215] p-3 rounded-xl border border-[#C5A059]/10">
+                              <div className="flex-grow">
+                                <input 
+                                  type="text"
+                                  value={asset.name}
+                                  onChange={(e) => {
+                                    const updated = assetDetails.map(a => a.id === asset.id ? { ...a, name: e.target.value } : a);
+                                    updateAssetDetails(updated);
+                                  }}
+                                  placeholder={lang === 'id' ? 'Nama sumber harta (misal: Rumah)' : 'Asset source name (e.g. Savings)'}
+                                  className="w-full bg-transparent px-1 text-xs text-[#EAE6E1] border-b border-transparent focus:border-[#C5A059]/30 focus:outline-none font-bold"
+                                />
+                              </div>
+
+                              <div className="w-36 shrink-0 relative">
+                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono text-[#C5A059]">Rp</span>
+                                <input 
+                                  type="number"
+                                  value={asset.value === 0 ? '' : asset.value}
+                                  onChange={(e) => {
+                                    const updated = assetDetails.map(a => a.id === asset.id ? { ...a, value: Number(e.target.value) } : a);
+                                    updateAssetDetails(updated);
+                                  }}
+                                  placeholder="0"
+                                  className="w-full bg-[#16171a] pl-7 pr-2.5 py-1.5 rounded-lg text-xs font-mono font-bold text-right text-[#EAE6E1] border border-[#C5A059]/15 focus:outline-none focus:border-[#C5A059]/40"
+                                />
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = assetDetails.filter(a => a.id !== asset.id);
+                                  updateAssetDetails(updated);
+                                }}
+                                className="text-red-400 hover:bg-red-950/20 p-1.5 rounded-lg transition-all cursor-pointer border border-transparent hover:border-red-950"
+                                title={lang === 'id' ? 'Hapus Pos' : 'Delete Asset'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Summary indicator */}
+                        <div className="flex items-center justify-between pt-3 border-t border-[#C5A059]/15">
+                          <span className="text-xs font-bold text-[#A69F96]">{lang === 'id' ? 'Gabungan Harta Kotor Terhitung:' : 'Total Calculated Gross Estate:'}</span>
+                          <span className="text-sm font-mono font-black text-[#C5A059]">
+                            Rp {financials.total_harta.toLocaleString('id-ID')}
+                          </span>
+                        </div>
                       </div>
 
                       <div>

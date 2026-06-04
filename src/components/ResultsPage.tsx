@@ -18,8 +18,10 @@ import {
   Globe,
   FileDown
 } from 'lucide-react';
-import { CalculationResult } from '../types';
+import { CalculationResult, Ustadz } from '../types';
 import { translations } from '../utils/translations';
+import { db } from '../utils/firebase';
+import { collection, query, getDocs, orderBy } from 'firebase/firestore';
 
 interface ResultsPageProps {
   result: CalculationResult;
@@ -42,6 +44,102 @@ export default function ResultsPage({
 
   const [hoveredSegment, setHoveredSegment] = useState<number | null>(null);
   const [isSaved, setIsSaved] = useState(false);
+
+  // Scholars states for Consulting
+  const [ustadzList, setUstadzList] = useState<Ustadz[]>([]);
+  const [question, setQuestion] = useState('');
+  const [selectedUstadz, setSelectedUstadz] = useState<string>('');
+  const [scholarsLoading, setScholarsLoading] = useState(true);
+
+  // Fetch scholars on mount
+  React.useEffect(() => {
+    const fetchScholars = async () => {
+      setScholarsLoading(true);
+      const DEFAULT_USTADZ: Ustadz[] = [
+        { id: 'u1', name: 'Ustadz Dr. KH. Muhammad Anas, MA.', phone: '628123456789' },
+        { id: 'u2', name: 'Ustadz H. Ahmad Fauzi, Lc., M.Ag.', phone: '628234567890' },
+        { id: 'u3', name: 'Ustadz Farid Wijaya, S.Sy.', phone: '628345678901' }
+      ];
+
+      try {
+        const q = query(collection(db, 'ustadz'), orderBy('createdAt', 'desc'));
+        const snap = await getDocs(q);
+        const fetched: Ustadz[] = [];
+        snap.forEach((d) => {
+          const dat = d.data();
+          fetched.push({
+            id: d.id,
+            name: dat.name || '',
+            phone: dat.phone || ''
+          });
+        });
+        
+        if (fetched.length > 0) {
+          setUstadzList(fetched);
+          setSelectedUstadz(fetched[0].id);
+        } else {
+          setUstadzList(DEFAULT_USTADZ);
+          setSelectedUstadz(DEFAULT_USTADZ[0].id);
+        }
+      } catch (err) {
+        console.error('Failed to load scholars for consulting:', err);
+        setUstadzList(DEFAULT_USTADZ);
+        setSelectedUstadz(DEFAULT_USTADZ[0].id);
+      } finally {
+        setScholarsLoading(false);
+      }
+    };
+    fetchScholars();
+  }, [lang]);
+
+  const handleAskUstadz = () => {
+    if (!question.trim()) {
+      alert(lang === 'id' ? 'Harap isikan pertanyaan Anda terlebih dahulu.' : 'Please enter your question first.');
+      return;
+    }
+    
+    const scholar = ustadzList.find(u => u.id === selectedUstadz) || ustadzList[0];
+    if (!scholar) {
+      alert(lang === 'id' ? 'Ustadh belum dipilih atau tidak tersedia.' : 'No Scholar selected.');
+      return;
+    }
+
+    // Build heirs text summary
+    const heirsSummary = heirs.map(h => {
+      const nominalS = h.nominalValue.toLocaleString('id-ID');
+      return `- ${h.relationshipLabel}: ${h.originalShareText} (Rp ${nominalS})`;
+    }).join('\n');
+
+    // Build beautiful text message
+    const messageText = 
+`Assalamu'alaikum Warahmatullahi Wabarakatuh Ustadh ${scholar.name},
+
+Perkenalkan saya ingin berkonsultasi mengenai pembagian waris Shariah keluarga saya dengan data laporan sebagai berikut:
+
+Nama Pewaris: ${nama_pewaris}
+Total Harta Kotor: Rp ${financials.total_harta.toLocaleString('id-ID')}
+Utang/Hutang: Rp ${financials.hutang.toLocaleString('id-ID')}
+Wasiat: Rp ${financials.wasiat.toLocaleString('id-ID')}
+Biaya Pemakaman: Rp ${financials.biaya_pemakaman.toLocaleString('id-ID')}
+Harta Bersih (Tirkah): Rp ${tirkah.toLocaleString('id-ID')}
+
+Daftar Ahli Waris yang Berhak:
+${heirsSummary}
+
+PERTANYAAN SAYA:
+"${question.trim()}"
+
+Mohon pencerahan, penjelasan, dan nasihat syariah dari Ustadh. Terima kasih banyak.
+
+Wassalamu'alaikum Warahmatullahi Wabarakatuh.`;
+
+    // Encode text and open WhatsApp
+    const encodedText = encodeURIComponent(messageText);
+    const waUrl = `https://wa.me/${scholar.phone}?text=${encodedText}`;
+    
+    // Redirect cleanly
+    window.open(waUrl, '_blank');
+  };
 
   const { nama_pewaris, financials, tirkah, heirs, appliedCalculations } = result;
 
@@ -149,6 +247,23 @@ export default function ResultsPage({
               </tr>
             </tbody>
           </table>
+
+          <!-- Rincian Sumber Harta Kotor -->
+          ${financials.harta_rincian && financials.harta_rincian.length > 0 ? `
+            <div style="margin-top: 12px; background-color: #fafaf9; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+              <strong style="font-size: 8.5pt; color: #0f172a; display: block; margin-bottom: 6px; text-transform: uppercase; font-family: sans-serif;">
+                ${isId ? 'Rincian Sumber Harta Kotor:' : 'Source Asset Itemization:'}
+              </strong>
+              <table style="width: 100%; border: none; margin: 0; font-size: 8.5pt;">
+                ${financials.harta_rincian.map(item => `
+                  <tr style="border: none;">
+                    <td style="border: none; padding: 4px; color: #334155; font-family: sans-serif;">• ${item.name}</td>
+                    <td style="border: none; padding: 4px; text-align: right; font-family: monospace; font-weight: bold; color: #475569;">${formatIDR(item.value)}</td>
+                  </tr>
+                `).join('')}
+              </table>
+            </div>
+          ` : ''}
         </div>
 
         <!-- Section 2: Applied Kaidah Alerts -->
@@ -266,6 +381,12 @@ export default function ResultsPage({
       content += "1. REKAPITULASI KEUANGAN PEWARIS & TIRKAH\n";
       content += separator;
       content += `Total Harta Kotor (Gross Assets) : ${formatIDR(financials.total_harta)}\n`;
+      if (financials.harta_rincian && financials.harta_rincian.length > 0) {
+        content += `   * Rincian Pos Harta Kotor:\n`;
+        financials.harta_rincian.forEach((item) => {
+          content += `     - ${item.name}: ${formatIDR(item.value)}\n`;
+        });
+      }
       content += `Dibereskan Hutang                : ${formatIDR(financials.hutang)}\n`;
       content += `Dibereskan Wasiat (Maks. 1/3)    : ${formatIDR(financials.wasiat)}\n`;
       content += `Biaya Pengurusan Jenazah (Tajhiz): ${formatIDR(financials.biaya_pemakaman)}\n`;
@@ -311,6 +432,12 @@ export default function ResultsPage({
       content += "1. FINANCIAL TRANSACTIONS & NET ESTATE (TIRKAH)\n";
       content += separator;
       content += `Total Gross Assets              : ${formatIDR(financials.total_harta)}\n`;
+      if (financials.harta_rincian && financials.harta_rincian.length > 0) {
+        content += `   * Gross Estate Sources Itemization:\n`;
+        financials.harta_rincian.forEach((item) => {
+          content += `     - ${item.name}: ${formatIDR(item.value)}\n`;
+        });
+      }
       content += `Outstanding Debts (Deduction)   : ${formatIDR(financials.hutang)}\n`;
       content += `Syar'i Bequest (Deduction)      : ${formatIDR(financials.wasiat)}\n`;
       content += `Burial Services (Deduction)     : ${formatIDR(financials.biaya_pemakaman)}\n`;
@@ -542,6 +669,22 @@ export default function ResultsPage({
                 <span className="text-[#CFCAC4]">{t_strings.res_total_gross_assets}</span>
                 <span className="font-mono font-bold">{formatIDR(financials.total_harta)}</span>
               </div>
+
+              {/* Rincian Sumber Harta Kotor */}
+              {financials.harta_rincian && financials.harta_rincian.length > 0 && (
+                <div className="bg-black/35 p-2.5 rounded-lg border border-[#C5A059]/10 space-y-1.5 max-h-32 overflow-y-auto custom-scrollbar">
+                  <p className="text-[9px] uppercase font-mono font-bold text-[#C5A059] tracking-widest border-b border-[#C5A059]/10 pb-1 mb-1">
+                    {lang === 'id' ? 'Rincian Sumber Harta:' : 'Asset Sources:'}
+                  </p>
+                  {financials.harta_rincian.map((item) => (
+                    <div key={item.id} className="flex justify-between text-[10px] text-gray-400">
+                      <span className="truncate max-w-[120px] font-semibold text-[#CFCAC4]">• {item.name}</span>
+                      <span className="font-mono font-bold text-[#EAE6E1]">{formatIDR(item.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="flex justify-between text-[#EAE6E1] pb-1 border-b border-[#C5A059]/10">
                 <span className="text-[#CFCAC4]">{t_strings.res_debt}</span>
                 <span className="font-mono">{formatIDR(financials.hutang)}</span>
@@ -765,6 +908,65 @@ export default function ResultsPage({
                 <Award className="w-5 h-5 text-[#C5A059] shrink-0 mt-0.5" />
                 <p className="text-[#EAE6E1] font-bold text-[11px]">{t_strings.fatwa_khi}</p>
               </div>
+            </div>
+          </div>
+
+          {/* Card: Tanya Ustadz Syariah */}
+          <div className="bg-[#111215] border-l-4 border-[#128C7E] border border-y-[#128C7E]/10 border-r-[#128C7E]/10 p-5 rounded-2xl shadow-2xl text-left space-y-4 print:hidden">
+            <h4 className="text-sm font-bold text-[#128C7E] font-serif flex items-center gap-1.5 border-b border-[#128C7E]/15 pb-2 uppercase tracking-wide">
+              <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
+              {lang === 'id' ? 'Konsultasi Tanya Ustadz' : 'Consult with Scholar'}
+            </h4>
+            
+            <p className="text-[11px] text-[#CFCAC4] leading-relaxed">
+              {lang === 'id' 
+                ? 'Ingin menanyakan atau mengonfirmasi hasil rincian waris Anda ke ustadz ahli syariah? Tuliskan pertanyaan dan diskusikan langsung via WhatsApp.' 
+                : 'Need to clarify this calculation or ask custom inheritance questions? Select a scholar and consult instantly on WhatsApp.'}
+            </p>
+
+            <div className="space-y-4 bg-black/20 p-4 rounded-xl border border-[#128C7E]/10">
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-[#A69F96] mb-1.5">
+                  {lang === 'id' ? 'Pilih Ustadz Ahli:' : 'Select Ustadh:'}
+                </label>
+                <select
+                  value={selectedUstadz}
+                  onChange={(e) => setSelectedUstadz(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-[#16171a] border border-[#C5A059]/20 rounded-lg text-[#EAE6E1] focus:ring-1 focus:ring-[#C5A059] focus:outline-none"
+                >
+                  {ustadzList.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-[#A69F96] mb-1.5">
+                  {lang === 'id' ? 'Isi Pertanyaan Anda:' : 'Your Question:'}
+                </label>
+                <textarea
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  placeholder={lang === 'id' ? 'Tuliskan pertanyaan rinci, misalnya: Apakah anak angkat berhak atas wasiat wajibah?' : 'Type your custom question here...'}
+                  rows={3}
+                  className="w-full p-3 text-xs bg-[#16171a] border border-[#C5A059]/15 rounded-lg text-[#EAE6E1] placeholder:text-gray-600 focus:ring-1 focus:ring-[#075E54] focus:outline-none resize-none font-medium leading-relaxed"
+                />
+              </div>
+
+              <button
+                onClick={handleAskUstadz}
+                disabled={ustadzList.length === 0}
+                className="w-full py-2.5 bg-[#128C7E] hover:bg-[#075E54] text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+              >
+                <img 
+                  src="https://upload.wikimedia.org/wikipedia/commons/5/5e/WhatsApp_icon.svg" 
+                  alt="WhatsApp Icon" 
+                  className="w-4 h-4 inline-block transform scale-110" 
+                />
+                <span>{lang === 'id' ? 'Tanya Sekarang' : 'Ask Now'}</span>
+              </button>
             </div>
           </div>
 

@@ -9,20 +9,22 @@ import AuthPage from './components/AuthPage';
 import WizardPage from './components/WizardPage';
 import ResultsPage from './components/ResultsPage';
 import HistoryDashboard from './components/HistoryDashboard';
+import AdminDashboard from './components/AdminDashboard';
 import { FinancialData, Heir, CalculationResult } from './types';
 import { calculateFaraid } from './utils/faraid';
 import { translations } from './utils/translations';
 import { auth, db, handleFirestoreError, OperationType } from './utils/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { doc, setDoc, deleteDoc, collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
-import { History, LayoutGrid } from 'lucide-react';
+import { doc, setDoc, deleteDoc, collection, query, orderBy, onSnapshot, where, getDoc } from 'firebase/firestore';
+import { History, LayoutGrid, ShieldCheck } from 'lucide-react';
 
 export default function App() {
-  const [screen, setScreen] = useState<'landing' | 'auth' | 'wizard' | 'results' | 'history'>('landing');
-  const [currentUser, setCurrentUser] = useState<{ name: string; email: string } | null>(null);
+  const [screen, setScreen] = useState<'landing' | 'auth' | 'wizard' | 'results' | 'history' | 'admin'>('landing');
+  const [currentUser, setCurrentUser] = useState<{ name: string; email: string; role?: 'Admin' | 'User'; uid?: string } | null>(null);
   const [activeResult, setActiveResult] = useState<CalculationResult | null>(null);
   const [savedReports, setSavedReports] = useState<CalculationResult[]>([]);
   const [lang, setLang] = useState<'id' | 'en'>('id');
+  const [isAdminPortalPreference, setIsAdminPortalPreference] = useState<boolean>(false);
 
   const t_strings = translations[lang];
 
@@ -36,12 +38,41 @@ export default function App() {
 
   // Auth State Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
+        let userRole: 'Admin' | 'User' = 'User';
+        let isApproved = false;
+        try {
+          const docSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            userRole = data.role === 'Admin' ? 'Admin' : 'User';
+            isApproved = data.approved || false;
+          } else {
+            // Eko behaves as bootstrapped Admin
+            const isEko = firebaseUser.email === 'ekowirsabits@gmail.com';
+            userRole = isEko ? 'Admin' : 'User';
+            isApproved = isEko;
+          }
+        } catch (e) {
+          console.error('Error fetching role in AuthStateListener:', e);
+        }
+
         const uProfile = {
           name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
           email: firebaseUser.email || '',
+          role: userRole,
+          uid: firebaseUser.uid
         };
+
+        if (!isApproved && userRole !== 'Admin') {
+          await signOut(auth);
+          setCurrentUser(null);
+          localStorage.removeItem('warisku_current_user');
+          localStorage.removeItem('warisku_simulated_user');
+          return;
+        }
+
         setCurrentUser(uProfile);
         localStorage.setItem('warisku_current_user', JSON.stringify(uProfile));
         localStorage.removeItem('warisku_simulated_user');
@@ -137,8 +168,15 @@ export default function App() {
     localStorage.setItem('warisku_lang', nextLang);
   };
 
-  const handleLoginSuccess = (user: { name: string; email: string }) => {
-    setCurrentUser(user);
+  const handleLoginSuccess = (user: { name: string; email: string; role?: 'Admin' | 'User'; uid?: string }) => {
+    const isEko = user.email === 'ekowirsabits@gmail.com';
+    const enrichedUser = {
+      ...user,
+      role: (isEko ? 'Admin' : (user.role || 'User')) as 'Admin' | 'User',
+      uid: user.uid || (isEko ? 'admin_simulated' : 'uid_' + Date.now())
+    };
+    setCurrentUser(enrichedUser);
+    localStorage.setItem('warisku_current_user', JSON.stringify(enrichedUser));
     
     // Load existing simulated reports for this specific email to prevent data loss on re-login
     const storedSimulated = localStorage.getItem(`warisku_reports_simulated_${user.email}`);
@@ -268,11 +306,15 @@ export default function App() {
         {screen === 'landing' && (
           <LandingPage
             onStartClicked={() => setScreen('wizard')}
-            onLoginClicked={() => setScreen('auth')}
+            onLoginClicked={(isAdmin) => {
+              setIsAdminPortalPreference(!!isAdmin);
+              setScreen('auth');
+            }}
             currentUser={currentUser}
             onLogout={handleLogout}
             lang={lang}
             onToggleLanguage={handleLanguageToggle}
+            onAdminClicked={() => setScreen('admin')}
           />
         )}
 
@@ -282,6 +324,7 @@ export default function App() {
             onLoginSuccess={handleLoginSuccess}
             lang={lang}
             onToggleLanguage={handleLanguageToggle}
+            isAdminPortal={isAdminPortalPreference}
           />
         )}
 
@@ -292,7 +335,10 @@ export default function App() {
             lang={lang}
             onToggleLanguage={handleLanguageToggle}
             currentUser={currentUser}
-            onLoginClicked={() => setScreen('auth')}
+            onLoginClicked={() => {
+              setIsAdminPortalPreference(false);
+              setScreen('auth');
+            }}
             onLogout={handleLogout}
           />
         )}
@@ -318,10 +364,29 @@ export default function App() {
             onToggleLanguage={handleLanguageToggle}
           />
         )}
+
+        {screen === 'admin' && (
+          <AdminDashboard
+            onBackToHome={() => setScreen('landing')}
+            lang={lang}
+          />
+        )}
       </div>
 
       {/* Persistent floating dashboard button for logged-in users / access past reports */}
-      <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-2.5 print:hidden">
+      <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-2.5 items-end print:hidden">
+        {currentUser?.role === 'Admin' && screen !== 'admin' && (
+          <button
+            onClick={() => setScreen('admin')}
+            className="bg-[#9c1f1f] text-white p-3.5 rounded-full shadow-2xl hover:bg-[#b02323] transition-all cursor-pointer flex items-center gap-2 font-bold text-xs border border-[#ff9e9e]/30"
+          >
+            <ShieldCheck className="w-5 h-5 text-[#ffbebe]" />
+            <span>
+              {lang === 'id' ? 'Dashboard Admin' : 'Admin Panel'}
+            </span>
+          </button>
+        )}
+
         {currentUser && screen !== 'history' && (
           <button
             onClick={() => setScreen('history')}
@@ -337,7 +402,7 @@ export default function App() {
         {screen !== 'landing' && (
           <button
             onClick={() => setScreen('landing')}
-            className="bg-[#006565] text-white p-3.5 rounded-full shadow-2xl hover:bg-[#008080] transition-all cursor-pointer flex items-center justify-center font-bold"
+            className="bg-[#006565] text-white p-2.5 h-12 w-12 rounded-full shadow-2xl hover:bg-[#008080] transition-all cursor-pointer flex items-center justify-center font-bold"
             title={lang === 'id' ? 'Beranda Utama' : 'Main Dashboard'}
           >
             <LayoutGrid className="w-5 h-5" />

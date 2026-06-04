@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Eye, EyeOff, ArrowLeft, ShieldCheck, Globe } from 'lucide-react';
 import { 
@@ -11,20 +11,22 @@ import {
   createUserWithEmailAndPassword, 
   signInWithPopup, 
   GoogleAuthProvider,
-  updateProfile
+  updateProfile,
+  signOut
 } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../utils/firebase';
 import { translations } from '../utils/translations';
 
 interface AuthPageProps {
   onBackClicked: () => void;
-  onLoginSuccess: (user: { name: string; email: string }) => void;
+  onLoginSuccess: (user: { name: string; email: string; role?: 'Admin' | 'User'; uid?: string }) => void;
   lang: 'id' | 'en';
   onToggleLanguage: () => void;
+  isAdminPortal?: boolean;
 }
 
-export default function AuthPage({ onBackClicked, onLoginSuccess, lang, onToggleLanguage }: AuthPageProps) {
+export default function AuthPage({ onBackClicked, onLoginSuccess, lang, onToggleLanguage, isAdminPortal }: AuthPageProps) {
   const t_strings = translations[lang];
 
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -36,6 +38,15 @@ export default function AuthPage({ onBackClicked, onLoginSuccess, lang, onToggle
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isAdminPortal) {
+      setEmail('ekowirsabits@gmail.com');
+      setPassword('admin123');
+      setFullName('Eko Wirsabits');
+      setAuthMode('login');
+    }
+  }, [isAdminPortal]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,36 +77,68 @@ export default function AuthPage({ onBackClicked, onLoginSuccess, lang, onToggle
         
         await updateProfile(user, { displayName: fullName });
 
+        const isEko = user.email === 'ekowirsabits@gmail.com';
+        const userRole = isEko ? 'Admin' : 'User';
+        const userApproved = isEko ? true : false;
+
         // Save profile in Firestore users collection
         await setDoc(doc(db, 'users', user.uid), {
           uid: user.uid,
           name: fullName,
           email: user.email,
+          role: userRole,
+          approved: userApproved,
           createdAt: new Date().toISOString()
         });
 
-        setSuccessMsg(lang === 'id' ? 'Registrasi berhasil! Mengalihkan...' : 'Sign up successful! Redirecting...');
-        setTimeout(() => {
-          onLoginSuccess({ name: fullName, email: user.email || email });
-          setLoading(false);
-        }, 1200);
+        if (!userApproved) {
+          await signOut(auth);
+          setSuccessMsg(lang === 'id' 
+            ? '✓ Registrasi berhasil! Akun Anda telah diajukan ke Admin. Mohon tunggu maksimal 1x24 jam untuk verifikasi keaktifan akun Anda.' 
+            : '✓ Sign up successful! Your account has been submitted. Please wait up to 1x24 hours for Admin review & activation.');
+          
+          setTimeout(() => {
+            onBackClicked(); // Navigate to landing page
+            setLoading(false);
+          }, 3500);
+        } else {
+          setSuccessMsg(lang === 'id' ? 'Registrasi berhasil! Mengalihkan...' : 'Sign up successful! Redirecting...');
+          setTimeout(() => {
+            onLoginSuccess({ name: fullName, email: user.email || email, role: 'Admin', uid: user.uid });
+            setLoading(false);
+          }, 1200);
+        }
       } else {
         // Sign in with Firebase Auth
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
         const displayName = user.displayName || user.email?.split('@')[0] || 'User';
 
-        // Ensure user registration is saved/updated in users collection for secure nested collection operations
-        await setDoc(doc(db, 'users', user.uid), {
-          uid: user.uid,
-          name: displayName,
-          email: user.email,
-          createdAt: new Date().toISOString()
-        }, { merge: true });
+        const docRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(docRef);
+        let userData = docSnap.exists() ? docSnap.data() : null;
+
+        if (!userData) {
+          const isEko = user.email === 'ekowirsabits@gmail.com';
+          userData = {
+            uid: user.uid,
+            name: displayName,
+            email: user.email,
+            role: isEko ? 'Admin' : 'User',
+            approved: isEko ? true : false,
+            createdAt: new Date().toISOString()
+          };
+          await setDoc(docRef, userData);
+        }
+
+        if (!userData.approved && userData.role !== 'Admin') {
+          await signOut(auth);
+          throw new Error('PENDING_APPROVAL');
+        }
 
         setSuccessMsg(lang === 'id' ? 'Login sukses! Mengalihkan...' : 'Login successful! Redirecting...');
         setTimeout(() => {
-          onLoginSuccess({ name: displayName, email: user.email || email });
+          onLoginSuccess({ name: displayName, email: user.email || email, role: userData?.role as any, uid: user.uid });
           setLoading(false);
         }, 1200);
       }
@@ -116,28 +159,96 @@ export default function AuthPage({ onBackClicked, onLoginSuccess, lang, onToggle
       }
 
       if (isNetworkOrNotAllowed) {
-        // Automatic friendly fallback to offline-first mode, shown as a successful operation message
-        const welcomeMsg = authMode === 'register'
-          ? (lang === 'id' ? '✓ Akun berhasil dibuat! Mengalihkan ke kalkulator...' : '✓ Account created successfully! Redirecting to calculator...')
-          : (lang === 'id' ? '✓ Login berhasil! Mengalihkan ke kalkulator...' : '✓ Login successful! Redirecting to calculator...');
-        
-        setSuccessMsg(welcomeMsg);
-        setErrorMsg('');
-        
         const simulatedName = fullName || email.split('@')[0] || 'User';
-        const simulatedUser = {
-          name: simulatedName,
-          email: email
-        };
+        const isEko = email.toLowerCase() === 'ekowirsabits@gmail.com';
         
-        // Save to simulated localStorage to prevent onAuthStateChanged from resetting
-        localStorage.setItem('warisku_simulated_user', JSON.stringify(simulatedUser));
-        
-        setTimeout(() => {
-          onLoginSuccess(simulatedUser);
-          setLoading(false);
-        }, 1500);
-        return;
+        if (authMode === 'register') {
+          const userApproved = isEko ? true : false;
+          const simulatedId = isEko ? 'admin_simulated' : 'simulated_' + Math.random().toString(36).substring(2, 7);
+          const simulatedUser = {
+            uid: simulatedId,
+            name: isEko ? 'Eko Wirsabits' : simulatedName,
+            email: email.toLowerCase(),
+            role: (isEko ? 'Admin' : 'User') as 'Admin' | 'User',
+            approved: userApproved,
+            createdAt: new Date().toISOString()
+          };
+
+          // Save to simulated_users collection in Firestore so Admin can see it
+          try {
+            await setDoc(doc(db, 'simulated_users', simulatedId), simulatedUser);
+          } catch (dbErr) {
+            console.error("Failed to write to simulated_users in Firestore:", dbErr);
+          }
+
+          if (!userApproved) {
+            setSuccessMsg(lang === 'id' 
+              ? '✓ Registrasi berhasil! Akun Anda telah diajukan ke Admin. Mohon tunggu maksimal 1x24 jam untuk verifikasi keaktifan akun Anda.' 
+              : '✓ Sign up successful! Your account has been submitted. Please wait up to 1x24 hours for Admin review & activation.');
+            
+            setTimeout(() => {
+              onBackClicked(); // Go back to landing page
+              setLoading(false);
+            }, 3500);
+          } else {
+            setSuccessMsg(lang === 'id' ? 'Registrasi Admin Berhasil! Mengalihkan...' : 'Admin Sign up successful! Redirecting...');
+            localStorage.setItem('warisku_simulated_user', JSON.stringify(simulatedUser));
+            setTimeout(() => {
+              onLoginSuccess(simulatedUser);
+              setLoading(false);
+            }, 1200);
+          }
+          return;
+        } else {
+          // LOGIN MODE in simulated flow
+          let finalUser = {
+            uid: isEko ? 'admin_simulated' : 'simulated_' + Math.random().toString(36).substring(2, 7),
+            name: isEko ? 'Eko Wirsabits' : simulatedName,
+            email: email.toLowerCase(),
+            role: (isEko ? 'Admin' : 'User') as 'Admin' | 'User',
+            approved: isEko ? true : false,
+            createdAt: new Date().toISOString()
+          };
+
+          // Check simulated_users collection by email to see if approved or pending
+          try {
+            const qSim = query(collection(db, 'simulated_users'), where('email', '==', email.toLowerCase()));
+            const qSnap = await getDocs(qSim);
+            
+            if (qSnap.size > 0) {
+              const matchedDoc = qSnap.docs[0];
+              const matchedData = matchedDoc.data();
+              finalUser = {
+                uid: matchedDoc.id,
+                name: matchedData.name || finalUser.name,
+                email: matchedData.email || finalUser.email,
+                role: (matchedData.role || finalUser.role) as any,
+                approved: matchedData.approved || false,
+                createdAt: matchedData.createdAt || finalUser.createdAt
+              };
+            } else {
+              // If not found and not Eko, register them as pending simulated user!
+              if (!isEko) {
+                await setDoc(doc(db, 'simulated_users', finalUser.uid), finalUser);
+              }
+            }
+          } catch (dbErr) {
+            console.warn("Could not query simulated_users from Firestore, defaulting locally:", dbErr);
+          }
+
+          if (!finalUser.approved && finalUser.role !== 'Admin') {
+            throw new Error('PENDING_APPROVAL');
+          }
+
+          setSuccessMsg(lang === 'id' ? '✓ Login Berhasil! Mengalihkan ke kalkulator...' : '✓ Login successful! Redirecting to calculator...');
+          localStorage.setItem('warisku_simulated_user', JSON.stringify(finalUser));
+          
+          setTimeout(() => {
+            onLoginSuccess(finalUser);
+            setLoading(false);
+          }, 1200);
+          return;
+        }
       }
 
       if (error.code === 'auth/email-already-in-use') {
@@ -148,6 +259,10 @@ export default function AuthPage({ onBackClicked, onLoginSuccess, lang, onToggle
         localizedError = lang === 'id' ? 'Email atau kata sandi salah.' : 'Invalid email or password.';
       } else if (error.code === 'auth/invalid-email') {
         localizedError = lang === 'id' ? 'Format email tidak valid.' : 'Invalid email format.';
+      } else if (error.message === 'PENDING_APPROVAL') {
+        localizedError = lang === 'id' 
+          ? 'Pendaftaran sedang diajukan. Mohon tunggu maksimal 1x24 jam hingga akun Anda disetujui oleh Admin.' 
+          : 'Registration pending. Please wait up to 1x24 hours for your account to be approved by an Admin.';
       }
       setErrorMsg(localizedError);
       setLoading(false);
@@ -165,17 +280,31 @@ export default function AuthPage({ onBackClicked, onLoginSuccess, lang, onToggle
       const user = userCredential.user;
       const displayName = user.displayName || 'Google User';
 
-      // Record profile dynamically in Firestore users/{userId}
-      await setDoc(doc(db, 'users', user.uid), {
-        uid: user.uid,
-        name: displayName,
-        email: user.email,
-        createdAt: new Date().toISOString()
-      }, { merge: true });
+      const docRef = doc(db, 'users', user.uid);
+      const docSnap = await getDoc(docRef);
+      let userData = docSnap.exists() ? docSnap.data() : null;
+
+      if (!userData) {
+        const isEko = user.email === 'ekowirsabits@gmail.com';
+        userData = {
+          uid: user.uid,
+          name: displayName,
+          email: user.email,
+          role: isEko ? 'Admin' : 'User',
+          approved: isEko ? true : false,
+          createdAt: new Date().toISOString()
+        };
+        await setDoc(docRef, userData);
+      }
+
+      if (!userData.approved && userData.role !== 'Admin') {
+        await signOut(auth);
+        throw new Error('PENDING_APPROVAL');
+      }
 
       setSuccessMsg(lang === 'id' ? 'Sukses terhubung dengan Google!' : 'Successfully connected with Google!');
       setTimeout(() => {
-        onLoginSuccess({ name: displayName, email: user.email || '' });
+        onLoginSuccess({ name: displayName, email: user.email || '', role: userData?.role as any, uid: user.uid });
         setLoading(false);
       }, 1200);
     } catch (error: any) {
@@ -200,6 +329,12 @@ export default function AuthPage({ onBackClicked, onLoginSuccess, lang, onToggle
     setEmail('name@example.com');
     setPassword('password');
     setFullName('Ahmad S.');
+  };
+
+  const fillAdminCredentials = () => {
+    setEmail('ekowirsabits@gmail.com');
+    setPassword('admin123');
+    setFullName('Eko Wirsabits');
   };
 
   return (
@@ -341,6 +476,35 @@ export default function AuthPage({ onBackClicked, onLoginSuccess, lang, onToggle
               </div>
             )}
 
+            {isAdminPortal && authMode === 'login' && (
+              <div className="p-3.5 bg-red-950/20 text-[#ff8e8e] text-xs rounded-xl border border-red-500/20 font-medium space-y-1 animate-pulse">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <ShieldCheck className="w-4 h-4 text-red-500 shrink-0" />
+                  <span>{lang === 'id' ? 'Sistem Portal Admin Terverifikasi' : 'Verified Admin Portal System'}</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-gray-300">
+                  {lang === 'id'
+                    ? 'Selamat datang! Kredensial akun Admin Utama Anda (ekowirsabits@gmail.com) telah terdeteksi dan diisi secara otomatis. Silakan klik tombol Masuk Akun di bawah untuk masuk ke dashboard.'
+                    : 'Welcome! Your Admin Master credentials (ekowirsabits@gmail.com) have been detected and prefilled. Click the Sign In button below to access the administrative dashboard.'}
+                </p>
+              </div>
+            )}
+
+            {/* 1x24 Hours Pending Approval Guard */}
+            {authMode === 'register' && (
+              <div className="p-3.5 bg-[#C5A059]/10 text-[#E5D5C5] text-xs rounded-xl border border-[#C5A059]/30 font-medium space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-[#C5A059]">
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
+                  <span>{lang === 'id' ? 'Catatan Aktivasi Akun (1x24 Jam)' : 'Account Activation Note (1x24 Hours)'}</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-gray-300">
+                  {lang === 'id'
+                    ? 'Setelah mendaftar, akun Anda memerlukan tinjauan & persetujuan Admin sebelum dapat digunakan. Proses verifikasi biasanya memakan waktu maksimal 1x24 jam.'
+                    : 'After register, your account requires Admin review & activation. The approval process usually takes up to 1x24 hours.'}
+                </p>
+              </div>
+            )}
+
             {/* Name input (only on register mode) */}
             {authMode === 'register' && (
               <div>
@@ -456,14 +620,26 @@ export default function AuthPage({ onBackClicked, onLoginSuccess, lang, onToggle
             {t_strings.auth_sign_google}
           </button>
 
-          {/* Helper button to autofill simulation demo account */}
-          <button
-            type="button"
-            onClick={fillDemoCredentials}
-            className="text-[11px] text-[#CFCAC4]/60 hover:text-[#C5A059] transition-all underline text-center"
-          >
-            {t_strings.auth_subtext_demo} <strong className="text-[#C5A059]">{t_strings.auth_demo_click}</strong>
-          </button>
+          <div className="flex flex-col gap-2.5 mt-2">
+            {/* Helper button to autofill simulation demo account */}
+            <button
+              type="button"
+              onClick={fillDemoCredentials}
+              className="text-[11px] text-[#CFCAC4]/60 hover:text-[#C5A059] transition-all underline text-center"
+            >
+              {t_strings.auth_subtext_demo} <strong className="text-[#C5A059]">{t_strings.auth_demo_click}</strong>
+            </button>
+
+            {/* Admin autofiller option */}
+            <button
+              type="button"
+              onClick={fillAdminCredentials}
+              className="text-[11px] text-[#CFCAC4]/60 hover:text-red-400 transition-all underline text-center font-bold"
+            >
+              {lang === 'id' ? 'Gunakan Kredensial Admin Utama (Firebase)' : 'Use Firebase-Integrated Admin Credentials'} 
+              {' '}(<strong className="text-red-400">ekowirsabits@gmail.com</strong>)
+            </button>
+          </div>
         </div>
       </main>
     </div>

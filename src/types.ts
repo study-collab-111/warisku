@@ -8,6 +8,22 @@ export interface User {
   name: string;
   email: string;
   role: 'Admin' | 'User';
+  approved?: boolean;
+  uid?: string;
+  createdAt?: string;
+}
+
+export interface Ustadz {
+  id: string;
+  name: string;
+  phone: string;
+  createdAt?: string;
+}
+
+export interface AssetDetail {
+  id: string;
+  name: string;
+  value: number;
 }
 
 export type RelationshipType =
@@ -32,6 +48,7 @@ export interface FinancialData {
   hutang: number;
   wasiat: number;
   biaya_pemakaman: number;
+  harta_rincian?: AssetDetail[];
 }
 
 export interface FaraidResultItem {

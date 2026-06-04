@@ -17,6 +17,14 @@
           "type": "string",
           "description": "User's verified email address"
         },
+        "approved": {
+          "type": "boolean",
+          "description": "Whether user registration is approved by Admin"
+        },
+        "role": {
+          "type": "string",
+          "description": "User role: Admin or User"
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -27,6 +35,38 @@
         "uid",
         "name",
         "email",
+        "approved",
+        "role",
+        "createdAt"
+      ]
+    },
+    "ustadz": {
+      "title": "Ustadz",
+      "description": "Dynamic scholar contact registry for consulting",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique scholar ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Scholar full name / title"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Scholar WhatsApp contact phone number (E.164 format)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "SCHOLAR added timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "phone",
         "createdAt"
       ]
     },
@@ -92,6 +132,14 @@
     "/simulated_reports/{reportId}": {
       "schema": "reports",
       "description": "Dynamic persistent collection of heir calculations for simulated/semi-offline sandbox users"
+    },
+    "/simulated_users/{userId}": {
+      "schema": "users",
+      "description": "Dynamic persistent fallback collection of user profiles for simulated sandbox users"
+    },
+    "/ustadz/{ustadzId}": {
+      "schema": "ustadz",
+      "description": "Dynamic scholar contact options for consulting"
     }
   }
 }
